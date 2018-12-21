@@ -137,7 +137,7 @@ class my_agent(agents.Agent):
                     direction = self.step()
                     self.game.move(direction)
                     n_iter += 1
-
+                print('checkpoint at epoch=%d: n_iter=%d with score=%d' %(this_epoch,n_iter,self.game.score))
         return
 
     def load_model(self, path):
