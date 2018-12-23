@@ -46,11 +46,11 @@ class my_agent(agents.Agent):
         x = Input(shape=(self.game.size, self.game.size, max_depth))
         # Conv Blocks
         y = self.add_blocks(x, 128)
-        # y=self.add_blocks(y,256)
-        # y=self.add_blocks(y,512)
+        y = self.add_blocks(y,256)
+        y = self.add_blocks(y,512)
 
         # Flatten&Dense Blocks
-        y = AveragePooling2D(pool_size=(self.game.size, self.game.size))(y)
+        # y = AveragePooling2D(pool_size=(self.game.size, self.game.size))(y)
         y = Flatten()(y)
         for num in [1024, 1024]:
             y = Dense(num, kernel_initializer='he_uniform')(y)
@@ -107,10 +107,39 @@ class my_agent(agents.Agent):
         training_generator = training_gene(self, batch_size=batch_size)
         game_for_expert = game.Game(size=4, enable_rewrite_board=True)
         expert = imitatedAgent(game_for_expert, )
+        training_x=list()
+        print('creating dataset...')
+        for i in range(2000):
+            training_x.extend(training_generator.__next__())
+        #normalize
+        print('normalizing...')
+        training_y=list()
+        for i, each in enumerate(training_x):
+            expert.game.board=np.array(each)
+            training_y.append(expert.step())
+            training_x[i] = board2input(
+                training_x[i], max_depth=self.max_depth)
+        # normolize the data
+        training_x = np.array(training_x)
+        training_y = to_categorical(training_y, num_classes=4)
+        self.model.fit(training_x,training_y,epochs=epoch,validation_split=0.1)
+
+        # finally test
+        empty_board = np.zeros((self.game.size, self.game.size))
+        self.game.board = empty_board
+        self.game._maybe_new_entry()
+        self.game._maybe_new_entry()
+        self.game.__end = False
+
+        n_iter = 0
+        while not self.game.end:
+            direction = self.step()
+            self.game.move(direction)
+            n_iter += 1
+        print('checkpoint : n_iter=%d with score=%d' %(n_iter,self.game.score))
+
+        '''
         for this_epoch in range(epoch):
-            # readin next batch
-            training_x = training_generator.__next__()
-            training_y = list()
             # get the expert answer
             for i, each in enumerate(training_x):
                 expert.game.board=each
@@ -139,9 +168,9 @@ class my_agent(agents.Agent):
                     n_iter += 1
                 print('checkpoint at epoch=%d: n_iter=%d with score=%d' %(this_epoch,n_iter,self.game.score))
         return
-
+        '''
     def load_model(self, path):
-        self.model = keras.models.load_model(path)
+        return keras.models.load_model(path)
 
     def save_model(self, path):
         keras.models.save_model(self.model, path)
@@ -198,7 +227,7 @@ def training_gene(weak_agent, batch_size=32):
             buffer = buffer[batch_size:]
 
 
-new_game = game.Game(size=4, enable_rewrite_board=True)
+new_game = game.Game(size=4,score_to_win=128,enable_rewrite_board=True)
 ag = my_agent(new_game)
-ag.train(agents.ExpectiMaxAgent, batch_size=32, epoch=1000, checkpoint=10)
+ag.train(agents.ExpectiMaxAgent, batch_size=32, epoch=50, checkpoint=10)
 ag.save_model('1.h5')
